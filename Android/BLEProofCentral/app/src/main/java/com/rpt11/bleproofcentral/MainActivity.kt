@@ -26,14 +26,17 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
 private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 3
-private const val SERVICE_UUID = "25AE1441-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_READ_UUID = "25AE1442-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_WRITE_UUID = "25AE1443-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_INDICATE_UUID = "25AE1444-05D3-4C5B-8281-93D4E07420CF"
+private const val SERVICE_UUID = "00003323-1212-efde-3323-785fbeef8086"
+private const val CHAR_FOR_CHANGE_UUID = "00003324-1212-efde-3323-785fbeef8086"
+private const val CHAR_FOR_READ_UUID = "00003325-1212-efde-3323-785fbeef8086"
+private const val CHAR_FOR_WRITE_UUID = "00003325-1212-efde-3323-785fbeef8086"
+private const val CHAR_FOR_INDICATE_UUID = "00003326-1212-efde-3323-785fbeef8086"
 private const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
 class MainActivity : AppCompatActivity() {
@@ -53,7 +56,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 textViewLifecycleState.text = "State: ${value.name}"
                 if (value != BLELifecycleState.Connected) {
-                    textViewSubscription.text = getString(R.string.text_not_subscribed)
+                    // textViewSubscription.text = getString(R.string.text_not_subscribed)
                 }
             }
         }
@@ -66,10 +69,12 @@ class MainActivity : AppCompatActivity() {
         get() = findViewById<TextView>(R.id.textViewReadValue)
     private val editTextWriteValue: TextView
         get() = findViewById<EditText>(R.id.editTextWriteValue)
-    private val textViewIndicateValue: TextView
-        get() = findViewById<TextView>(R.id.textViewIndicateValue)
-    private val textViewSubscription: TextView
-        get() = findViewById<TextView>(R.id.textViewSubscription)
+    private val editTextChangeValue: TextView
+        get() = findViewById<EditText>(R.id.editTextChangeValue)
+    // private val textViewIndicateValue: TextView
+    //     get() = findViewById<TextView>(R.id.textViewIndicateValue)
+    // private val textViewSubscription: TextView
+    //     get() = findViewById<TextView>(R.id.textViewSubscription)
     private val textViewLog: TextView
         get() = findViewById<TextView>(R.id.textViewLog)
     private val scrollViewLog: ScrollView
@@ -80,7 +85,14 @@ class MainActivity : AppCompatActivity() {
     private var connectedGatt: BluetoothGatt? = null
     private var characteristicForRead: BluetoothGattCharacteristic? = null
     private var characteristicForWrite: BluetoothGattCharacteristic? = null
+    private var characteristicForChange: BluetoothGattCharacteristic? = null
     private var characteristicForIndicate: BluetoothGattCharacteristic? = null
+
+    private var authKey = ByteArray(16)
+    private var newKey = ByteArray(16)
+    private var cipher = Cipher.getInstance("AES/ECB/NoPadding")
+    private var secretKeySpec = SecretKeySpec(authKey, "AES")
+    private var pendingCharWrite: BluetoothGattCharacteristic? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,6 +116,16 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         bleEndLifecycle()
         super.onDestroy()
+    }
+
+    fun decryptAES(encryptedToken: ByteArray): ByteArray {
+        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec)
+        return cipher.doFinal(encryptedToken)
+    }
+
+    fun encryptAES(plain: ByteArray): ByteArray {
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec)
+        return cipher.doFinal(plain)
     }
 
     fun onTapRead(view: View) {
@@ -136,8 +158,37 @@ class MainActivity : AppCompatActivity() {
             return
         }
         characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        characteristic.value = editTextWriteValue.text.toString().toByteArray(Charsets.UTF_8)
+        // characteristic.value = editTextWriteValue.text.toString().toByteArray(Charsets.UTF_8)
+        characteristic.value = editTextWriteValue.text.toString().chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
         gatt.writeCharacteristic(characteristic)
+    }
+
+    fun onTapChange(view: View) {
+        var gatt = connectedGatt ?: run {
+            appendLog("ERROR: write failed, no connected device")
+            return
+        }
+        var characteristic = characteristicForChange ?:  run {
+            appendLog("ERROR: write failed, characteristic unavailable $CHAR_FOR_CHANGE_UUID")
+            return
+        }
+        if (!characteristic.isWriteable()) {
+            appendLog("ERROR: write failed, characteristic not writeable $CHAR_FOR_CHANGE_UUID")
+            return
+        }
+        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        newKey = editTextChangeValue.text.toString().chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
+        val validation = newKey.map {0x55.xor(it.toInt()).toByte()}
+            .toByteArray()
+
+        characteristic.value = encryptAES(newKey + validation)
+        pendingCharWrite = characteristic
+        gatt.requestMtu(40)
+
     }
 
     fun onTapClearLog(view: View) {
@@ -362,7 +413,8 @@ class MainActivity : AppCompatActivity() {
             connectedGatt = gatt
             characteristicForRead = service.getCharacteristic(UUID.fromString(CHAR_FOR_READ_UUID))
             characteristicForWrite = service.getCharacteristic(UUID.fromString(CHAR_FOR_WRITE_UUID))
-            characteristicForIndicate = service.getCharacteristic(UUID.fromString(CHAR_FOR_INDICATE_UUID))
+            characteristicForChange = service.getCharacteristic(UUID.fromString(CHAR_FOR_CHANGE_UUID))
+            // characteristicForIndicate = service.getCharacteristic(UUID.fromString(CHAR_FOR_INDICATE_UUID))
 
             characteristicForIndicate?.let {
                 lifecycleState = BLELifecycleState.ConnectedSubscribing
@@ -375,18 +427,36 @@ class MainActivity : AppCompatActivity() {
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             if (characteristic.uuid == UUID.fromString(CHAR_FOR_READ_UUID)) {
-                val strValue = characteristic.value.toString(Charsets.UTF_8)
+                // val strValue = characteristic.value.toString(Charsets.UTF_8)
+                val strValue = characteristic.value.joinToString("") { "%02x".format(it) }
                 val log = "onCharacteristicRead " + when (status) {
                     BluetoothGatt.GATT_SUCCESS -> "OK, value=\"$strValue\""
                     BluetoothGatt.GATT_READ_NOT_PERMITTED -> "not allowed"
                     else -> "error $status"
                 }
                 appendLog(log)
+                val token = decryptAES(characteristic.value).joinToString("") { "%02x".format(it) }
                 runOnUiThread {
                     textViewReadValue.text = strValue
+                    editTextWriteValue.text = token
                 }
             } else {
                 appendLog("onCharacteristicRead unknown uuid $characteristic.uuid")
+            }
+        }
+
+        override fun onMtuChanged (gatt: BluetoothGatt, mtu: Int,  status: Int) {
+            val log: String = "onMtuChanged " + when (status) {
+                BluetoothGatt.GATT_SUCCESS -> "OK MTU=" + mtu
+                BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> "not allowed"
+                BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> "invalid length"
+                else -> "error $status"
+            }
+            appendLog(log)
+
+            if (pendingCharWrite != null) {
+                gatt.writeCharacteristic(pendingCharWrite)
+                pendingCharWrite = null
             }
         }
 
@@ -399,6 +469,18 @@ class MainActivity : AppCompatActivity() {
                     else -> "error $status"
                 }
                 appendLog(log)
+            } else if (characteristic.uuid == UUID.fromString(CHAR_FOR_CHANGE_UUID)) {
+                val log: String = "onCharacteristicChange " + when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> "OK"
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> "not allowed"
+                    BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> "invalid length"
+                    else -> "error $status"
+                }
+                appendLog(log)
+
+
+                authKey = newKey
+                secretKeySpec = SecretKeySpec(authKey, "AES")
             } else {
                 appendLog("onCharacteristicWrite unknown uuid $characteristic.uuid")
             }
@@ -408,9 +490,9 @@ class MainActivity : AppCompatActivity() {
             if (characteristic.uuid == UUID.fromString(CHAR_FOR_INDICATE_UUID)) {
                 val strValue = characteristic.value.toString(Charsets.UTF_8)
                 appendLog("onCharacteristicChanged value=\"$strValue\"")
-                runOnUiThread {
-                    textViewIndicateValue.text = strValue
-                }
+                // runOnUiThread {
+                //     textViewIndicateValue.text = strValue
+                // }
             } else {
                 appendLog("onCharacteristicChanged unknown uuid $characteristic.uuid")
             }
@@ -426,9 +508,9 @@ class MainActivity : AppCompatActivity() {
                         false -> getString(R.string.text_not_subscribed)
                     }
                     appendLog("onDescriptorWrite $subscriptionText")
-                    runOnUiThread {
-                        textViewSubscription.text = subscriptionText
-                    }
+                    // runOnUiThread {
+                    //     textViewSubscription.text = subscriptionText
+                    // }
                 } else {
                     appendLog("ERROR: onDescriptorWrite status=$status uuid=${descriptor.uuid} char=${descriptor.characteristic.uuid}")
                 }

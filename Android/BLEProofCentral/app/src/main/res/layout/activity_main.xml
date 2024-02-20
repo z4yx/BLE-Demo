@@ -68,7 +68,7 @@
         app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toEndOf="@+id/editTextWriteValue" />
 
-    <TextView
+    <!-- <TextView
         android:id="@+id/textViewIndicateValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -76,7 +76,45 @@
         android:layout_marginTop="8dp"
         android:textSize="18sp"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textViewIndicateHint" /> 
+
+    <TextView
+        android:id="@+id/textViewSubscription"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:text="@string/text_not_subscribed"
+        android:textSize="14sp"
+        app:layout_constraintBaseline_toBaselineOf="@+id/textViewIndicateHint"
+        app:layout_constraintEnd_toEndOf="parent" />-->
+
+    <EditText
+        android:id="@+id/editTextChangeValue"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:ems="10"
+        android:hint="@string/text_hint_write_value"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:text="@string/text_default_key"
+        app:layout_constraintEnd_toStartOf="@+id/buttonChange"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewIndicateHint" />
+
+    <Button
+        android:id="@+id/buttonChange"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:onClick="onTapChange"
+        android:text="@string/button_change"
+        app:layout_constraintBaseline_toBaselineOf="@+id/editTextChangeValue"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toEndOf="@+id/editTextChangeValue" />
 
     <TextView
         android:id="@+id/textViewWriteHint"
@@ -108,7 +146,7 @@
         android:layout_marginTop="16dp"
         android:text="@string/text_static_indicate_hint"
         android:textSize="14sp"
-        app:layout_constraintStart_toStartOf="@+id/textViewIndicateValue"
+        app:layout_constraintStart_toStartOf="@+id/editTextChangeValue"
         app:layout_constraintTop_toBottomOf="@+id/editTextWriteValue" />
 
     <ScrollView
@@ -125,7 +163,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewIndicateValue"
+        app:layout_constraintTop_toBottomOf="@+id/editTextChangeValue"
         app:layout_constraintVertical_bias="0.0">
 
         <TextView
@@ -177,15 +215,5 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewAutoconnect" />
-
-    <TextView
-        android:id="@+id/textViewSubscription"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:text="@string/text_not_subscribed"
-        android:textSize="14sp"
-        app:layout_constraintBaseline_toBaselineOf="@+id/textViewIndicateHint"
-        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
